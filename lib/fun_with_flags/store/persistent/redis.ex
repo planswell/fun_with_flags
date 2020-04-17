@@ -20,12 +20,40 @@ defmodule FunWithFlags.Store.Persistent.Redis do
       uri when is_binary(uri) ->
         {uri, @conn_options}
       opts when is_list(opts) ->
-        Keyword.merge(opts, @conn_options)
+               if Keyword.get(opts, :url) do
+                 {url, rest} = Keyword.pop(opts, :url)
+                 {url, default_options(rest)}
+               else
+                 default_options(opts)
+               end
     end
 
     Redix.child_spec(conf)
   end
 
+  defp default_options(config) do
+    config
+    |> Keyword.merge(@conn_options)
+    |> add_aws_config()
+  end
+
+  defp deep_merge(_key, value1, value2) do
+    if Keyword.keyword?(value1) and Keyword.keyword?(value2) do
+      Keyword.merge(value1, value2, &deep_merge/3)
+    else
+      value2
+    end
+  end
+
+
+  defp add_aws_config(config) do
+    if Keyword.get(config, :aws) do
+      aws_ssl_config = [:socket_opts, customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]]
+      Keyword.merge(config, aws_ssl_config, &deep_merge/3)
+    else
+      config
+    end
+  end
 
   @impl true
   def get(flag_name) do
