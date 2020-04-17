@@ -4,7 +4,7 @@ defmodule FunWithFlags.Notifications.Redis do
   @moduledoc false
   use GenServer
   require Logger
-  alias FunWithFlags.{Config, Store}
+  alias FunWithFlags.{Config, Store, RedisAWSConfig}
 
   # Use the Redis conn from the persistence module to
   # issue redis commands (to publish notification).
@@ -70,18 +70,30 @@ defmodule FunWithFlags.Notifications.Redis do
   # The unique_id will become the state of the GenServer
   #
   def init(unique_id) do
-    {:ok, _pid} = case Config.redis_config do
-      uri when is_binary(uri) ->
-        Redix.PubSub.start_link(uri, @conn_options)
-      opts when is_list(opts) ->
-        Redix.PubSub.start_link(Keyword.merge(opts, @conn_options))
-    end
+    {:ok, _pid} = connect(Config.redis_config)
 
     {:ok, ref} = Redix.PubSub.subscribe(@conn, @channel, self())
     state = {unique_id, ref}
     {:ok, state}
   end
 
+
+  defp connect(uri) when is_binary(uri), do: Redix.PubSub.start_link(uri, @conn_options)
+  defp connect(opts) when is_list(opts) do
+    if Keyword.get(opts, :url) do
+      {url, opts2} =
+        opts
+        |> Keyword.merge(@conn_options)
+        |> RedisAWSConfig.add_config()
+        |> Keyword.pop(:url)
+      Redix.PubSub.start_link(url, opts2)
+    else
+      opts
+      |> Keyword.merge(@conn_options)
+      |> RedisAWSConfig.add_config()
+      |> Redix.PubSub.start_link()
+    end
+  end
 
   def handle_call(:get_unique_id, _from, state = {unique_id, _ref}) do
     {:reply, {:ok, unique_id}, state}

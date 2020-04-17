@@ -26,7 +26,12 @@ defmodule FunWithFlags.Config do
       uri  when is_binary(uri) ->
         uri
       opts when is_list(opts) ->
-        Keyword.merge(@default_redis_config, opts)
+        if Keyword.get(opts, :url) do
+          opts
+        else
+          Keyword.merge(@default_redis_config, opts)
+        end
+
       {:system, var} when is_binary(var) ->
         System.get_env(var)
     end
