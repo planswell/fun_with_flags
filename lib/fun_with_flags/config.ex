@@ -26,9 +26,41 @@ defmodule FunWithFlags.Config do
       uri  when is_binary(uri) ->
         uri
       opts when is_list(opts) ->
-        Keyword.merge(@default_redis_config, opts)
+        if Keyword.get(opts, :url) do
+          opts
+          |> default_redis_options([])
+          |> Keyword.pop(:url)
+        else
+          default_redis_options(opts, @default_redis_config)
+        end
+
       {:system, var} when is_binary(var) ->
         System.get_env(var)
+    end
+  end
+
+  defp default_redis_options(config, defaults) do
+    config
+    |> Keyword.merge(defaults)
+    |> add_aws_config()
+    |> Keyword.delete(:aws)
+  end
+
+  defp deep_merge(_key, value1, value2) do
+    if Keyword.keyword?(value1) and Keyword.keyword?(value2) do
+      Keyword.merge(value1, value2, &deep_merge/3)
+    else
+      value2
+    end
+  end
+
+  defp add_aws_config(config) do
+    if Keyword.get(config, :aws) && Keyword.get(config, :ssl) do
+      aws_ssl_config = [socket_opts: [customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]]]
+      config
+      |> Keyword.merge(aws_ssl_config, &deep_merge/3)
+    else
+      config
     end
   end
 
